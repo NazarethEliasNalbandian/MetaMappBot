@@ -112,7 +112,7 @@ public class AgregarHechoCommand implements BotCommand {
                 }
             }
         } catch (Exception e) {
-            e.printStackTrace();
+            System.out.println("Error al procesar el paso: " + e.getMessage());
             msg.setText("❌ Error al procesar el paso. Intentá nuevamente.");
         }
 

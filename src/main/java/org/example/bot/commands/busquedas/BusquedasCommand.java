@@ -56,7 +56,7 @@ public class BusquedasCommand implements BotCommand {
                 String ubicacion = h.optString("ubicacion", "N/D");
                 String origen = h.optString("origen", "N/D");
                 String fechaStr = h.optString("fecha", null);
-                String etiquetasStr = "";
+                String etiquetasStr;
 
                 if (h.has("etiquetas") && !h.isNull("etiquetas")) {
                     JSONArray etiquetas = h.getJSONArray("etiquetas");
@@ -86,7 +86,8 @@ public class BusquedasCommand implements BotCommand {
             msg.setText(sb.toString());
 
         } catch (Exception e) {
-            msg.setText("⚠️ Error al realizar la búsqueda:\n" + e.getMessage());
+            msg.setText("⚠️ Error al realizar la búsqueda");
+            System.out.println("Error al realizar la búsqueda: " + e.getMessage());
         }
 
         return msg;
