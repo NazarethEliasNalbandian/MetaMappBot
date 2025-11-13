@@ -2,6 +2,7 @@ package org.example.bot;
 
 import org.example.bot.commands.*;
 import org.example.bot.commands.agregador.ListarHechosCommand;
+import org.example.bot.commands.busquedas.BusquedasCommand;
 import org.example.bot.commands.fuentes.AgregarHecho.AgregarHechoCommand;
 import org.example.bot.commands.fuentes.AgregarPdi.AgregarPdiCommand;
 import org.example.bot.commands.fuentes.VerHecho.VerHechoCommand;
@@ -31,6 +32,9 @@ public class MetaMapaBot extends TelegramLongPollingBot {
             // Solicitudes
             new SolicitarBorradoCommand(),
             new CambiarEstadoCommand(),
+
+            // Busquedas
+            new BusquedasCommand(),
 
             new HelpCommand()
     );
