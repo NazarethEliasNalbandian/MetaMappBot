@@ -10,118 +10,184 @@ import java.util.Map;
 
 public class AgregarHechoCommand implements BotCommand {
 
-    private final FuentesClient fuentesClient = new FuentesClient();
+  private final FuentesClient fuentesClient = new FuentesClient();
 
-    // Conversaciones activas por chat
-    private final Map<Long, ConversacionHecho> conversaciones = new HashMap<>();
+  // Conversaciones activas por chat
+  private final Map<Long, ConversacionHecho> conversaciones = new HashMap<>();
 
-    @Override
-    public boolean matches(String text) {
-        return text.startsWith("/agregarhecho");
+  @Override
+  public boolean matches(String text) {
+    return text.startsWith("/agregarhecho");
+  }
+
+  @Override
+  public SendMessage handle(Update update) throws Exception {
+    Long chatId = update.getMessage().getChatId();
+    String text = update.getMessage().getText().trim();
+    SendMessage msg = new SendMessage();
+    msg.setChatId(chatId.toString());
+
+    // Si la conversación ya está en curso → seguirla
+    if (conversaciones.containsKey(chatId) && !text.startsWith("/agregarhecho")) {
+      return manejarConversacion(chatId, text);
     }
 
-    @Override
-    public SendMessage handle(Update update) throws Exception {
-        Long chatId = update.getMessage().getChatId();
-        String text = update.getMessage().getText().trim();
-        SendMessage msg = new SendMessage();
-        msg.setChatId(chatId.toString());
+    // Si es el inicio del comando
+    String[] parts = text.split(" ", 2);
+    if (parts.length < 2) {
+      msg.setText("Uso: /agregarhecho <nombre_coleccion>");
+      return msg;
+    }
 
-        // Si la conversación ya está en curso → seguirla
-        if (conversaciones.containsKey(chatId) && !text.startsWith("/agregarhecho")) {
-            return manejarConversacion(chatId, text);
+    ConversacionHecho conv = new ConversacionHecho();
+    conv.coleccion = parts[1];
+    conv.pasoActual = ConversacionHecho.Paso.ID;
+    conversaciones.put(chatId, conv);
+
+    msg.setText("🆔 Iniciando carga para colección *" + parts[1] + "*.\nPor favor, ingresá el ID del hecho (por ejemplo: h100):");
+    return msg;
+  }
+
+  private SendMessage manejarConversacion(Long chatId, String text) {
+    ConversacionHecho conv = conversaciones.get(chatId);
+    SendMessage msg = new SendMessage();
+    msg.setChatId(chatId.toString());
+    msg.enableHtml(true);
+
+    try {
+      switch (conv.pasoActual) {
+
+        // 1) ID
+        case ID -> {
+          conv.datos.put("id", text.trim());
+          conv.pasoActual = ConversacionHecho.Paso.TITULO;
+
+          msg.setText("""
+              📝 <b>Perfecto.</b>
+              Ahora ingresá el <b>título del hecho</b>:
+              """);
         }
 
-        // Si es el inicio del comando
-        String[] parts = text.split(" ", 2);
-        if (parts.length < 2) {
-            msg.setText("Uso: /agregarhecho <nombre_coleccion>");
-            return msg;
+        // 2) TITULO
+        case TITULO -> {
+          conv.datos.put("titulo", text.trim());
+          conv.pasoActual = ConversacionHecho.Paso.CATEGORIA;
+
+          msg.setText("""
+              📚 Ingresá la <b>categoría</b> del hecho.
+                                  
+              Ejemplos: <code>DELITO</code>, <code>SOCIAL</code>, <code>SALUD</code>, <code>DESASTRE</code>
+              """);
         }
 
-        ConversacionHecho conv = new ConversacionHecho();
-        conv.coleccion = parts[1];
-        conv.pasoActual = ConversacionHecho.Paso.ID;
-        conversaciones.put(chatId, conv);
+        // 3) CATEGORIA
+        case CATEGORIA -> {
+          conv.datos.put("categoria", text.trim().toUpperCase());
+          conv.pasoActual = ConversacionHecho.Paso.UBICACION;
 
-        msg.setText("🆔 Iniciando carga para colección *" + parts[1] + "*.\nPor favor, ingresá el ID del hecho (por ejemplo: h100):");
-        return msg;
-    }
-
-    private SendMessage manejarConversacion(Long chatId, String text) {
-        ConversacionHecho conv = conversaciones.get(chatId);
-        SendMessage msg = new SendMessage();
-        msg.setChatId(chatId.toString());
-
-        try {
-            switch (conv.pasoActual) {
-                case ID -> {
-                    conv.datos.put("id", text);
-                    conv.pasoActual = ConversacionHecho.Paso.TITULO;
-                    msg.setText("📝 Ingresá el título del hecho:");
-                }
-                case TITULO -> {
-                    conv.datos.put("titulo", text);
-                    conv.pasoActual = ConversacionHecho.Paso.CATEGORIA;
-                    msg.setText("📚 Ingresá la categoría (por ej. DESASTRE, SALUD, SOCIAL, etc.):");
-                }
-                case CATEGORIA -> {
-                    conv.datos.put("categoria", text.toUpperCase());
-                    conv.pasoActual = ConversacionHecho.Paso.UBICACION;
-                    msg.setText("📍 Ingresá la ubicación:");
-                }
-                case UBICACION -> {
-                    conv.datos.put("ubicacion", text);
-                    conv.pasoActual = ConversacionHecho.Paso.FECHA;
-                    msg.setText("📅 Ingresá la fecha en formato ISO 8601 (ej: 2025-09-07T15:00:00):");
-                }
-                case FECHA -> {
-                    conv.datos.put("fecha", text);
-                    conv.pasoActual = ConversacionHecho.Paso.ORIGEN;
-                    msg.setText("🧾 Ingresá el origen (ej: manual, dataset, colaborativo):");
-                }
-                case ORIGEN -> {
-                    conv.datos.put("origen", text);
-                    conv.pasoActual = ConversacionHecho.Paso.COMPLETO;
-
-                    // Construir JSON
-                    String jsonBody = String.format("""
-                        {
-                          "id": "%s",
-                          "titulo": "%s",
-                          "etiquetas": [],
-                          "categoria": "%s",
-                          "ubicacion": "%s",
-                          "fecha": "%s",
-                          "origen": "%s"
-                        }
-                        """,
-                            conv.datos.get("id"),
-                            conv.datos.get("titulo"),
-                            conv.datos.get("categoria"),
-                            conv.datos.get("ubicacion"),
-                            conv.datos.get("fecha"),
-                            conv.datos.get("origen")
-                    );
-
-                    String respuesta = fuentesClient.agregarHecho(conv.coleccion, jsonBody);
-                    msg.setText("✅ Hecho agregado correctamente:\n🆔 ID: "
-                            + conv.datos.get("id") + "\n" + respuesta);
-
-                    conversaciones.remove(chatId);
-                }
-            }
-        } catch (Exception e) {
-            System.out.println("Error al procesar el paso: " + e.getMessage());
-            msg.setText("❌ Error al procesar el paso. Intentá nuevamente.");
+          msg.setText("""
+              📍 Ingresá la <b>ubicación</b> del hecho:
+              """);
         }
 
-        return msg;
+        // 4) UBICACION
+        case UBICACION -> {
+          conv.datos.put("ubicacion", text.trim());
+          conv.pasoActual = ConversacionHecho.Paso.FECHA;
+
+          msg.setText("""
+              📅 Ingresá la <b>fecha</b> del hecho.
+                                  
+              Formato ISO 8601:
+              <code>2025-08-05T15:00:00</code>
+              """);
+        }
+
+        // 5) FECHA
+        case FECHA -> {
+          conv.datos.put("fecha", text.trim());
+          conv.pasoActual = ConversacionHecho.Paso.ORIGEN;
+
+          msg.setText("""
+              🧾 Ingresá el <b>origen</b> del hecho:
+                                  
+              Ejemplos:
+              <code>manual</code>,
+              <code>dataset</code>,
+              <code>colaborativo</code>
+              """);
+        }
+
+        // 6) ORIGEN → crear hecho
+        case ORIGEN -> {
+          conv.datos.put("origen", text.trim());
+          conv.pasoActual = ConversacionHecho.Paso.COMPLETO;
+
+          // Crear JSON para la API
+          String jsonBody = String.format("""
+                  {
+                    "id": "%s",
+                    "titulo": "%s",
+                    "etiquetas": [],
+                    "categoria": "%s",
+                    "ubicacion": "%s",
+                    "fecha": "%s",
+                    "origen": "%s"
+                  }
+                  """,
+              conv.datos.get("id"),
+              conv.datos.get("titulo"),
+              conv.datos.get("categoria"),
+              conv.datos.get("ubicacion"),
+              conv.datos.get("fecha"),
+              conv.datos.get("origen")
+          );
+
+          String respuestaApi = fuentesClient.agregarHecho(conv.coleccion, jsonBody);
+
+          // parsear JSON de respuesta
+          org.json.JSONObject json = new org.json.JSONObject(respuestaApi);
+          String hechoId = json.optString("id", conv.datos.get("id"));
+
+          // Respuesta linda
+          msg.setText("""
+              ✅ <b>Hecho agregado correctamente</b>
+
+              🗂️ <b>Colección:</b> %s
+              🆔 <b>ID:</b> <code>%s</code>
+              📝 <b>Título:</b> %s
+              📚 <b>Categoría:</b> %s
+              📍 <b>Ubicación:</b> %s
+              📅 <b>Fecha:</b> %s
+              🧾 <b>Origen:</b> %s
+
+              ✔ El hecho fue registrado en el sistema.
+              """.formatted(
+              conv.coleccion,
+              hechoId,
+              conv.datos.get("titulo"),
+              conv.datos.get("categoria"),
+              conv.datos.get("ubicacion"),
+              conv.datos.get("fecha"),
+              conv.datos.get("origen")
+          ));
+
+          conversaciones.remove(chatId);
+        }
+      }
+
+    } catch (Exception e) {
+      e.printStackTrace();
+      msg.setText("❌ Ocurrió un error al procesar los datos. Intentá nuevamente.");
     }
 
-    @Override
-    public boolean hasConversation(Long chatId) {
-        return conversaciones.containsKey(chatId);
-    }
+    return msg;
+  }
+
+
+  @Override
+  public boolean hasConversation(Long chatId) {
+    return conversaciones.containsKey(chatId);
+  }
 
 }

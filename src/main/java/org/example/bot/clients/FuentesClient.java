@@ -4,6 +4,7 @@ import org.example.bot.utils.HttpUtils;
 
 public class FuentesClient {
     private static final String BASE_URL = "https://fuentes.onrender.com";
+//    private static final String BASE_URL = "https://tp-anual-dds-fuentes.onrender.com";
 
     public String verHecho(String id) throws Exception {
         String url = BASE_URL + "/api/hecho/" + id;

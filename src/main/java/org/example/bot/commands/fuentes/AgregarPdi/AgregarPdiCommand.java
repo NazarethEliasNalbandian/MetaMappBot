@@ -55,34 +55,62 @@ public class AgregarPdiCommand implements BotCommand {
     ConversacionPdi conv = conversaciones.get(chatId);
     SendMessage msg = new SendMessage();
     msg.setChatId(chatId.toString());
+    msg.enableHtml(true);
 
     try {
       switch (conv.pasoActual) {
-        case DESCRIPCION -> {
-          conv.datos.put("descripcion", text);
-          conv.pasoActual = ConversacionPdi.Paso.LUGAR;
-          msg.setText("📍 Ingresá el lugar:");
-        }
-        case LUGAR -> {
-          conv.datos.put("lugar", text);
-          conv.pasoActual = ConversacionPdi.Paso.MOMENTO;
-          msg.setText("🕒 Ingresá el momento (formato ISO 8601, ej: 2025-09-28T13:00:00):");
-        }
-        case MOMENTO -> {
-          conv.datos.put("momento", text);
-          conv.pasoActual = ConversacionPdi.Paso.CONTENIDO;
-          msg.setText("📝 Ingresá el contenido del PDI:");
-        }
-        case CONTENIDO -> {
-          conv.datos.put("contenido", text);
-          conv.pasoActual = ConversacionPdi.Paso.IMAGE_URL;
-          msg.setText("🖼️ Ingresá la URL de la imagen:");
-        }
-        case IMAGE_URL -> {
-          conv.datos.put("image_url", text);
-          conv.pasoActual = ConversacionPdi.Paso.COMPLETO;
 
-          // Construir JSON final
+        // 1) DESCRIPCIÓN
+        case DESCRIPCION -> {
+          conv.datos.put("descripcion", text.trim());
+          conv.pasoActual = ConversacionPdi.Paso.LUGAR;
+
+          msg.setText("""
+              📝 <b>Descripción registrada.</b>
+              Ahora ingresá el <b>lugar</b> del PDI:
+              """);
+        }
+
+        // 2) LUGAR
+        case LUGAR -> {
+          conv.datos.put("lugar", text.trim());
+          conv.pasoActual = ConversacionPdi.Paso.MOMENTO;
+
+          msg.setText("""
+              🕒 Ingresá el <b>momento</b> del PDI.
+              Formato recomendado:
+              <code>2025-09-28T13:00:00</code>
+              """);
+        }
+
+        // 3) MOMENTO
+        case MOMENTO -> {
+          conv.datos.put("momento", text.trim());
+          conv.pasoActual = ConversacionPdi.Paso.CONTENIDO;
+
+          msg.setText("""
+              🧾 Ingresá el <b>contenido</b> del PDI:
+              """);
+        }
+
+        // 4) CONTENIDO
+        case CONTENIDO -> {
+          conv.datos.put("contenido", text.trim());
+          conv.pasoActual = ConversacionPdi.Paso.IMAGE_URL;
+
+          msg.setText("""
+              🖼️ Ingresá la <b>URL de la imagen</b> del PDI
+              (o escribí <code>ninguna</code> si no tiene):
+              """);
+        }
+
+        // 5) IMAGE_URL → crear PDI
+        case IMAGE_URL -> {
+          String imageUrl = text.trim();
+          if (imageUrl.equalsIgnoreCase("ninguna")) imageUrl = "";
+          conv.datos.put("image_url", imageUrl);
+
+          // JSON final para enviar al servidor
           String jsonBody = String.format("""
                   {
                     "hecho_id": "%s",
@@ -101,16 +129,50 @@ public class AgregarPdiCommand implements BotCommand {
               conv.datos.get("image_url")
           );
 
-          String respuesta = fuentesClient.agregarPdi(conv.hechoId, jsonBody);
-          msg.setText("✅ PDI agregado correctamente al hecho *" + conv.hechoId + "* ✅\n" + respuesta);
+          String respuestaApi = fuentesClient.agregarPdi(conv.hechoId, jsonBody);
+
+          // parsear json
+          org.json.JSONObject json = new org.json.JSONObject(respuestaApi);
+          String pdiId = json.optString("id", "desconocido");
+
+          String imagen = imageUrl.isBlank()
+              ? "❌ <i>Sin imagen adjunta</i>"
+              : "<a href=\"" + imageUrl + "\">🖼️ Ver imagen</a>";
+
+          // Respuesta linda
+          msg.setText("""
+              ✅ <b>PDI agregado correctamente</b>
+
+              🔗 <b>Hecho asociado:</b> <code>%s</code>
+              🆔 <b>ID del PDI:</b> <code>%s</code>
+
+              📝 <b>Descripción:</b> %s
+              📍 <b>Lugar:</b> %s
+              🕒 <b>Momento:</b> %s
+              🧾 <b>Contenido:</b> %s
+              🖼️ <b>Imagen:</b> %s
+
+              ✔ El PDI fue registrado correctamente en el sistema.
+              """.formatted(
+              conv.hechoId,
+              pdiId,
+              conv.datos.get("descripcion"),
+              conv.datos.get("lugar"),
+              conv.datos.get("momento"),
+              conv.datos.get("contenido"),
+              imagen
+          ));
+
           conversaciones.remove(chatId);
         }
       }
+
     } catch (Exception e) {
-      System.out.println("Error al procesar el paso: " + e.getMessage());
-      msg.setText("❌ Error al procesar el paso. Intentá nuevamente.");
+      e.printStackTrace();
+      msg.setText("❌ Ocurrió un error al procesar el PDI. Intentá nuevamente.");
     }
 
     return msg;
   }
+
 }
