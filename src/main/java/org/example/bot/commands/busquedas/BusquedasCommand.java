@@ -14,7 +14,7 @@ import java.time.format.DateTimeFormatter;
 
 public class BusquedasCommand implements BotCommand {
 
-    private static final String BASE_URL = "http://localhost:8080/api/fuentes/busqueda";
+    private static final String BASE_URL = "https://two025-tp-entrega-2-lgo1980.onrender.com/api/fuentes/busqueda";
 
     @Override
     public SendMessage handle(Update update) {
